@@ -1,18 +1,5 @@
 # jenkins-casc.yaml (Simplified and Corrected)
 
-# --- CREDENTIALS ---
-credentials:
-  # The system block is correct for defining a Username/Password credential
-  system:
-    domainCredentials:
-      - credentials:
-          - usernamePassword:
-              id: "4caed40b-5d9a-401c-bbb9-2fd5673b07ee"
-              password: "{AQAAABAAAAAwNIuG+cY1RgrbUzqJX69hFdZp8su5y117Wvq7nhrl6RnbSDMB+kGKYflEUvi9xvplzngCos3q+VdBvzyAkraPQA==}"
-              scope: GLOBAL
-              username: "mapel88"
-        domain:
-          name: "global"
 # --- JENKINS CORE CONFIGURATION ---
 jenkins:
   # Security Realm and Authorization
@@ -21,12 +8,12 @@ jenkins:
       allowsSignup: false
       users:
         - id: "Admin"
-          name: "Maayan"
+          name: "Admin"
           password: '#jbcrypt:$2a$10$K2t3Bqw4hR.RIZfPQd9zeekhTHa48PDH3HXAmDpWfjj/5OcJIuj.2'
           properties:
             - "favorite"
             - mailer:
-                emailAddress: "mapelboim@gmail.com"
+                emailAddress: "jenkins@example.com"
             - "apiToken"
   authorizationStrategy:
     loggedInUsersCanDoAnything:
@@ -79,7 +66,7 @@ tool:
 # --- UNCLASSIFIED (Cleaned) ---
 unclassified:
   location:
-    adminAddress: "mapelboim@gmail.com"
+    adminAddress: "jenkins@example.com"
     url: "http://localhost:8080/"
 
 # --- JOB DSL DEFINITION ---
