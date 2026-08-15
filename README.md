@@ -11,9 +11,9 @@ and provides a local Jenkins instance for building/testing using Docker-based ag
 ## Quick start (local)
 1. Open a terminal in the repo root.
 2. Build agent images:
-   docker compose -f dockers/agents-compose.yaml build
+   docker compose -f dockers/agents-compose.yaml build --no-cache
 3. Build and run Jenkins:
-   docker compose -f dockers/jenkins-compose.yaml up -d --build
+   docker compose -f dockers/jenkins-compose.yaml up -d --build --no-cache
 4. Access Jenkins:
    URL: https://localhost:8080
    Admin credentials (example in this repo): `admin` / `Aa123456`

@@ -9,7 +9,7 @@ ARG GID=1000
 
 # Install necessary packages
 RUN dnf -y update && dnf -y install \
-    sudo git java-17-openjdk-devel openssh-server \
+    sudo git java-21-openjdk-devel openssh-server \
     gcc make rpm-build rpmdevtools redhat-rpm-config \
     python3 python3-pip python3-pyyaml procps \
     && dnf clean all

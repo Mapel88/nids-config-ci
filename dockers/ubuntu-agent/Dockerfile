@@ -8,7 +8,7 @@ ARG GID=1000
 
 # Install packages for building .deb and Java
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    openjdk-17-jdk \
+    openjdk-21-jdk \
     ca-certificates curl \
     build-essential pkg-config file dpkg-dev \
     python3 python3-venv python3-pip python3-yaml \
