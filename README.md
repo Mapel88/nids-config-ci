@@ -8,7 +8,7 @@ The project provisions a local Jenkins environment with **Jenkins Configuration 
 
 - Jenkins Configuration as Code (JCasC)
 - Job DSL and Pipeline as Code
-- Dynamic Docker-based Jenkins agents
+- Dynamic, ephemeral Docker-based Jenkins agents
 - Ubuntu and AlmaLinux build/test environments
 - Parallel DEB and RPM packaging
 - Automated package installation and validation
@@ -32,7 +32,8 @@ The project provisions a local Jenkins environment with **Jenkins Configuration 
                      Jenkins package pipeline
                       /                     \
                      v                       v
-          Ubuntu Docker agent        AlmaLinux Docker agent
+       Ubuntu ephemeral agent      AlmaLinux ephemeral agent
+             (Docker)                    (Docker)
                 |                           |
              Build DEB                   Build RPM
                 |                           |
@@ -41,9 +42,12 @@ The project provisions a local Jenkins environment with **Jenkins Configuration 
                              |
                              v
                          Artifacts
+                             |
+                             v
+                  Agent containers removed
 ```
 
-The Jenkins Docker plugin creates build agents on demand. The Ubuntu and AlmaLinux images include Java 21 for compatibility with current Jenkins Remoting.
+The Jenkins Docker plugin provisions build agents on demand for the queued workload. The Ubuntu and AlmaLinux agents are ephemeral: Jenkins creates the agent containers for pipeline execution and removes them after the work completes. The agent images include Java 21 for compatibility with current Jenkins Remoting.
 
 ## Prerequisites
 
@@ -100,12 +104,14 @@ docker compose -f dockers/jenkins-compose.yaml up -d --build
 The pipeline is defined in [`JenkinsFile`](JenkinsFile) and runs Linux packaging and validation across two Docker agent types.
 
 1. Jenkins checks out the repository.
-2. Ubuntu agent builds the Debian package (`.deb`).
-3. AlmaLinux agent builds the RPM package (`.rpm`).
-4. Jenkins archives the generated packages.
-5. Packages are installed in their respective Linux environments.
-6. The CLI and validator exercise the NIDS configuration behavior.
-7. Successful builds publish the package artifacts in Jenkins.
+2. Jenkins provisions ephemeral Ubuntu and AlmaLinux Docker agents on demand.
+3. Ubuntu agent builds the Debian package (`.deb`).
+4. AlmaLinux agent builds the RPM package (`.rpm`).
+5. Jenkins archives the generated packages.
+6. Packages are installed in their respective Linux environments.
+7. The CLI and validator exercise the NIDS configuration behavior.
+8. Successful builds publish the package artifacts in Jenkins.
+9. Jenkins removes the ephemeral agent containers after execution.
 
 ## CLI tool
 
@@ -154,7 +160,7 @@ The two dynamic agent images are:
 - [`dockers/ubuntu-agent/Dockerfile`](dockers/ubuntu-agent/Dockerfile)
 - [`dockers/alma-agent/Dockerfile`](dockers/alma-agent/Dockerfile)
 
-Agents include the build toolchain, Python dependencies, Linux networking utilities, and Java 21 required by current Jenkins Remoting.
+Agents include the build toolchain, Python dependencies, Linux networking utilities, and Java 21 required by current Jenkins Remoting. They are provisioned as disposable containers by the Jenkins Docker plugin and removed when their assigned pipeline work is finished.
 
 Network configuration tests require elevated container capabilities. The Ubuntu agent receives `NET_ADMIN` and `NET_RAW`; the RHEL-family validation agent currently runs privileged because its test flow includes kernel/sysctl changes.
 
