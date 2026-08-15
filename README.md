@@ -1,75 +1,192 @@
-# NIDS Configuration Repo
+# NIDS Configuration CI/CD
 
-Lightweight repository that builds and validates a small NIDS configuration CLI packaged as DEB/RPM,
-and provides a local Jenkins instance for building/testing using Docker-based agents.
+A self-contained technical infrastructure project that builds, packages, and validates a Python-based NIDS network configuration CLI across Ubuntu and RHEL-family Linux environments.
+
+The project provisions a local Jenkins environment with **Jenkins Configuration as Code (JCasC)** and **Job DSL**, then uses on-demand Docker build agents to create and validate both **DEB** and **RPM** packages.
+
+## What this project demonstrates
+
+- Jenkins Configuration as Code (JCasC)
+- Job DSL and Pipeline as Code
+- Dynamic Docker-based Jenkins agents
+- Ubuntu and AlmaLinux build/test environments
+- Parallel DEB and RPM packaging
+- Automated package installation and validation
+- Linux network-interface configuration and validation
+- Python CLI development
+- CI artifact publishing
+
+## Architecture
+
+```text
+                         GitHub repository
+                                |
+                                v
+                         Jenkins controller
+                         (Docker + JCasC)
+                                |
+                                v
+                              Job DSL
+                                |
+                                v
+                     Jenkins package pipeline
+                      /                     \
+                     v                       v
+          Ubuntu Docker agent        AlmaLinux Docker agent
+                |                           |
+             Build DEB                   Build RPM
+                |                           |
+                 \                         /
+                  +------ Validation ------+
+                             |
+                             v
+                         Artifacts
+```
+
+The Jenkins Docker plugin creates build agents on demand. The Ubuntu and AlmaLinux images include Java 21 for compatibility with current Jenkins Remoting.
 
 ## Prerequisites
-- Docker Desktop installed and running (with Docker Compose)
-- git (for checking out repo)
-- On agents / test hosts: python3, iproute2 (ip), procps (sysctl), PyYAML (packaged or pip install PyYAML)
 
-## Quick start (local)
-1. Open a terminal in the repo root.
-2. Build agent images:
-   docker compose -f dockers/agents-compose.yaml build --no-cache
-3. Build and run Jenkins:
-   docker compose -f dockers/jenkins-compose.yaml up -d --build --no-cache
-4. Access Jenkins:
-   URL: https://localhost:8080
-   Admin credentials (example in this repo): `admin` / `Aa123456`
+- Docker Desktop (or Docker Engine)
+- Docker Compose
+- Git
+- Internet access for the initial image, package, and Jenkins plugin downloads
 
-## Pipeline / How to run
-- The Jenkins pipeline is defined in [Jenkinsfile](Jenkinsfile).
-- It builds:
-  - DEB on the `ubuntu-agent` using [dockers/ubuntu-agent/Dockerfile](dockers/ubuntu-agent/Dockerfile) and [dockers/ubuntu-agent/control](dockers/ubuntu-agent/control)
-  - RPM on the `rhel-agent` using [dockers/alma-agent/Dockerfile](dockers/alma-agent/Dockerfile) and [dockers/alma-agent/nids-config.spec](dockers/alma-agent/nids-config.spec)
-- After building, the pipeline validates packages by installing and running the CLI and the validator.
+No local Java or Python installation is required for the Jenkins workflow; the required runtimes are included in the Docker images.
+
+## Quick start
+
+From the repository root:
+
+```bash
+# Build the Linux agent images
+docker compose -f dockers/agents-compose.yaml build
+
+# Build and start Jenkins
+docker compose -f dockers/jenkins-compose.yaml up -d --build
+```
+
+Open Jenkins at:
+
+```text
+http://localhost:8080
+```
+
+Demo credentials:
+
+```text
+Username: Admin
+Password: Aa123456
+```
+
+The credentials are intentionally local demo credentials for this disposable Jenkins environment and must not be reused for a real Jenkins deployment.
+
+JCasC configures Jenkins automatically and Job DSL creates the `nids-package-build-and-test` pipeline. Open the pipeline in Jenkins and select **Build Now**.
+
+## Clean installation
+
+Jenkins state is persisted in a Docker volume. To remove existing jobs/build history and test the repository as a completely new installation:
+
+```bash
+docker compose -f dockers/jenkins-compose.yaml down -v
+docker compose -f dockers/agents-compose.yaml build --no-cache
+docker compose -f dockers/jenkins-compose.yaml up -d --build
+```
+
+`--no-cache` belongs to `docker compose build`; it is intentionally not passed to `docker compose up`.
+
+## Pipeline flow
+
+The pipeline is defined in [`JenkinsFile`](JenkinsFile) and runs Linux packaging and validation across two Docker agent types.
+
+1. Jenkins checks out the repository.
+2. Ubuntu agent builds the Debian package (`.deb`).
+3. AlmaLinux agent builds the RPM package (`.rpm`).
+4. Jenkins archives the generated packages.
+5. Packages are installed in their respective Linux environments.
+6. The CLI and validator exercise the NIDS configuration behavior.
+7. Successful builds publish the package artifacts in Jenkins.
 
 ## CLI tool
-- Main script: [nids-config.py](nids-config.py)
-  - Key classes: `NIDSConfig`, `NetworkInterface`
-- Default config: `/etc/nids/config.yaml` (tool always uses this path)
-- Supported CLI actions:
-  - `--enable-ipv6` / `--disable-ipv6` — try to apply kernel IPv6 via sysctl; operation is required for configure-all
-  - `--enable-ipv4` — marks ipv4_enabled and will attempt to bring non-loopback interfaces UP (no global IPv4 kernel toggle)
-  - `--set-prom-ipv6` / `--set-prom-ipv4` — set promiscuous mode on active interfaces and record results in config
-  - `--configure-all` — enable both IPv4 & IPv6 and set promiscuous mode on all active interfaces (will fail if kernel IPv6 sysctl cannot be applied)
-  - `--status` — display configuration and interface/promisc status
-  - `--validate` — run local environment checks
-- Notes:
-  - There is no single safe kernel toggle to globally disable IPv4; the tool does not attempt destructive global IPv4 kernel changes.
-  - `configure-all` is strict: it will fail if kernel IPv6 cannot be applied (sysctl missing or permission denied).
+
+Main script: [`nids-config.py`](nids-config.py)
+
+Key classes:
+
+- `NIDSConfig`
+- `NetworkInterface`
+
+Default configuration path:
+
+```text
+/etc/nids/config.yaml
+```
+
+Supported actions include:
+
+- `--enable-ipv6` / `--disable-ipv6` - apply kernel IPv6 configuration through `sysctl`.
+- `--enable-ipv4` - record IPv4 as enabled and attempt to bring non-loopback interfaces up.
+- `--set-prom-ipv6` / `--set-prom-ipv4` - configure promiscuous mode on active interfaces.
+- `--configure-all` - configure IPv4, IPv6, and promiscuous mode for active interfaces.
+- `--status` - display configuration and interface status.
+- `--validate` - run local environment checks.
+
+`--configure-all` intentionally fails when required kernel/network operations cannot be applied rather than silently reporting success.
 
 ## Validator
-- Script: [validator.py](validator.py)
-- Usage highlights (used by pipeline):
-  - `python3 validator.py --expect-ipv6 true|false|skip --expect-ipv4 true|false|skip`
-  - `--run-configure-all` — invoke `nids-config --configure-all` then validate config and promiscuous interfaces (validator treats failure as fatal)
-- Validator behavior:
-  - Always checks config keys in `/etc/nids/config.yaml`.
-  - Validates kernel IPv6 state when requested — missing sysctl or permission errors are treated as failures to match nids-config strict behavior.
-  - Promiscuous/interface checks require `ip` tool and NET_ADMIN capability in agents; otherwise tests may fail.
 
-## Jenkins / Agent notes
-- Agent images must include:
-  - `iproute2` (`ip`), `procps` (`sysctl`), `python3`, and PyYAML (or installation via pip).
-- Agent containers must run with sufficient capabilities to allow:
-  - setting interface promisc: `NET_ADMIN`, `NET_RAW`
-  - changing kernel sysctls (may require `SYS_ADMIN` or privileged container depending on host/seccomp/AppArmor)
-- Prefer granting specific capabilities to Jenkins agent containers (cap_add) instead of `privileged: true` where possible.
+Validation logic is implemented in [`validator.py`](validator.py).
+
+The validator checks the persisted configuration and, when requested, validates kernel IPv6 state and interface/promiscuous-mode behavior. The Jenkins agents therefore require Linux networking utilities and sufficient container capabilities for the tests they execute.
+
+Example:
+
+```bash
+python3 validator.py --expect-ipv6 true --expect-ipv4 true --run-configure-all
+```
+
+## Jenkins and Docker agent design
+
+The Jenkins controller is configured through [`dockers/jenkins/jenkins-casc.yaml`](dockers/jenkins/jenkins-casc.yaml).
+
+The two dynamic agent images are:
+
+- [`dockers/ubuntu-agent/Dockerfile`](dockers/ubuntu-agent/Dockerfile)
+- [`dockers/alma-agent/Dockerfile`](dockers/alma-agent/Dockerfile)
+
+Agents include the build toolchain, Python dependencies, Linux networking utilities, and Java 21 required by current Jenkins Remoting.
+
+Network configuration tests require elevated container capabilities. The Ubuntu agent receives `NET_ADMIN` and `NET_RAW`; the RHEL-family validation agent currently runs privileged because its test flow includes kernel/sysctl changes.
 
 ## Useful commands
-- Build agents:
-  docker compose -f dockers/agents-compose.yaml build
-- Start Jenkins:
-  docker compose -f dockers/jenkins-compose.yaml up -d --build
-- Enter an agent container (for local debugging):
-  docker exec -it ubuntu-agent /bin/bash
-  docker exec -it rhel-agent /bin/bash
 
-## Where to look
-- Pipeline: [Jenkinsfile](Jenkinsfile)
-- CLI logic & tests: [nids-config.py](nids-config.py)
-- Validator: [validator.py](validator.py)
-- Packaging (DEB control): [dockers/ubuntu-agent/control](dockers/ubuntu-agent/control)
-- Packaging (RPM spec): [dockers/alma-agent/nids-config.spec](dockers/alma-agent/nids-config.spec)
+```bash
+# Build agents
+docker compose -f dockers/agents-compose.yaml build
+
+# Start Jenkins
+docker compose -f dockers/jenkins-compose.yaml up -d --build
+
+# Follow Jenkins logs
+docker logs -f jenkins-master
+
+# Stop the environment while preserving Jenkins state
+docker compose -f dockers/jenkins-compose.yaml down
+
+# Stop the environment and remove persisted Jenkins state
+docker compose -f dockers/jenkins-compose.yaml down -v
+```
+
+## Repository map
+
+- Pipeline: [`JenkinsFile`](JenkinsFile)
+- Jenkins Configuration as Code: [`dockers/jenkins/jenkins-casc.yaml`](dockers/jenkins/jenkins-casc.yaml)
+- Job DSL: [`dockers/jenkins/jobs/nids-pipeline.groovy`](dockers/jenkins/jobs/nids-pipeline.groovy)
+- Python CLI: [`nids-config.py`](nids-config.py)
+- Validator: [`validator.py`](validator.py)
+- Debian packaging: [`dockers/ubuntu-agent/control`](dockers/ubuntu-agent/control)
+- RPM packaging: [`dockers/alma-agent/nids-config.spec`](dockers/alma-agent/nids-config.spec)
+
+## Scope
+
+This is a technical demonstration project rather than a production NIDS deployment. It is designed to demonstrate Linux automation, CI/CD, packaging, Docker-based build infrastructure, and automated validation in a reproducible local environment.
